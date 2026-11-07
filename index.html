@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#172b4d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Spese Smart">
+<link rel="manifest" href="manifest.webmanifest">
+<title>Spese Smart</title>
+<style>
+:root{--navy:#172b4d;--blue:#315b91;--green:#16845b;--red:#c44747;--bg:#f3f5f8;--card:#fff;--muted:#687386;--line:#e3e8ef}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#182235;font:15px -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding-bottom:calc(82px + env(safe-area-inset-bottom))}
+header{background:var(--navy);color:white;padding:22px 18px 18px;border-radius:0 0 22px 22px}
+.top{display:flex;justify-content:space-between;align-items:center}.brand{font-size:21px;font-weight:800;letter-spacing:.2px}.month{font-size:13px;opacity:.8;margin-top:4px}
+main{max-width:720px;margin:auto;padding:14px}
+.card{background:var(--card);border-radius:17px;padding:16px;margin:0 0 13px;box-shadow:0 3px 14px #1b2d4610}
+.total-label,.muted{color:var(--muted);font-size:13px}.total{font-size:34px;font-weight:800;margin:5px 0 12px;letter-spacing:-1px}
+.metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}.metric{background:#f5f7fa;border-radius:12px;padding:11px}.metric strong{display:block;font-size:18px;margin-top:4px}
+.progress{height:9px;background:#e8edf3;border-radius:99px;overflow:hidden;margin:10px 0 5px}.progress>div{height:100%;background:var(--green);width:0}
+h2{font-size:17px;margin:3px 0 13px}.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button,.button{border:0;border-radius:12px;padding:13px 14px;font-weight:700;font-size:14px;cursor:pointer}
+.primary{background:var(--navy);color:#fff}.secondary{background:#eaf0f7;color:var(--navy)}.danger{background:#fff0f0;color:var(--red)}.small{padding:8px 10px;font-size:12px}
+.tabs{position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid var(--line);display:flex;justify-content:space-around;padding:9px 4px calc(9px + env(safe-area-inset-bottom));z-index:5}
+.tabs button{background:transparent;color:var(--muted);padding:7px 8px;flex:1;font-size:12px}.tabs button.active{color:var(--navy);font-weight:800}
+.tabs span{display:block;font-size:19px;margin-bottom:2px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px}.entry{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--line)}.entry:last-child{border:0}.ico{width:38px;height:38px;border-radius:12px;background:#eff3f8;display:grid;place-items:center;font-size:18px;flex-shrink:0}.entry-title{font-weight:700}.entry-sub{font-size:12px;color:var(--muted);margin-top:3px}.amount{font-weight:800;white-space:nowrap}.negative{color:var(--red)}.positive{color:var(--green)}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}input,select,textarea{width:100%;border:1px solid #d9e0e9;border-radius:11px;padding:12px;font:inherit;background:white;color:#182235}textarea{min-height:76px;resize:vertical}.formgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.hidden{display:none!important}.catrow{margin:11px 0}.cathead{display:flex;justify-content:space-between;font-size:13px;margin-bottom:6px}.bar{height:8px;background:#edf0f4;border-radius:99px;overflow:hidden}.bar div{height:100%;background:var(--blue);border-radius:99px}.hint{font-size:12px;color:var(--muted);line-height:1.45}.pill{font-size:11px;background:#edf2f8;border-radius:99px;padding:4px 8px;color:var(--navy)}
+#toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%);background:#172b4d;color:#fff;padding:11px 16px;border-radius:12px;z-index:10;display:none;max-width:90%;text-align:center}
+@media(min-width:650px){main{padding-top:20px}.total{font-size:40px}}
+
+#appShell.hidden{display:none!important}
+#securityGate{position:fixed;inset:0;z-index:100;background:#f3f5f8;display:flex;align-items:center;justify-content:center;padding:22px}
+#securityGate .gate-card{width:100%;max-width:430px;background:#fff;border-radius:20px;padding:24px;box-shadow:0 8px 35px #1b2d4620}
+#securityGate h1{font-size:23px;margin:0 0 8px;color:#172b4d}
+#securityGate p{font-size:14px;color:#687386;line-height:1.5}
+#securityGate button{width:100%;margin-top:12px}
+#gateError{color:#c44747;min-height:20px;font-size:13px;margin-top:8px}
+</style>
+</head>
+<body>
+<section id="securityGate" aria-live="polite"><div class="gate-card">
+ <div style="font-size:30px;margin-bottom:12px">🔐</div>
+ <h1>Spese Smart</h1><p id="gateIntro">I tuoi dati sono protetti con cifratura. Crea una password personale per iniziare.</p>
+ <label for="gatePassword">Password personale</label><input id="gatePassword" type="password" autocomplete="current-password" minlength="10" placeholder="Almeno 10 caratteri">
+ <div id="confirmWrap"><label for="gateConfirm">Conferma password</label><input id="gateConfirm" type="password" autocomplete="new-password" minlength="10" placeholder="Ripeti la password"></div>
+ <button class="primary" id="gateButton" onclick="handleGate()">Crea archivio protetto</button>
+ <div id="gateError"></div><p class="hint">La password non viene inviata né salvata. Se la dimentichi, non sarà possibile recuperare i dati: conserva una copia sicura.</p>
+ </div></section>
+<div id="appShell" class="hidden">
+<header><div class="top"><div><div class="brand">◈ Spese Smart</div><div class="month" id="monthLabel"></div></div><div class="pill" style="background:#ffffff20;color:white">PERSONALE</div></div></header>
+<main>
+<section id="dashboard">
+ <div class="card">
+  <div class="total-label">Uscite del mese</div><div class="total" id="monthSpent">€ 0,00</div>
+  <div class="metrics">
+   <div class="metric"><span class="muted">Entrate</span><strong class="positive" id="monthIncome">€ 0,00</strong></div>
+   <div class="metric"><span class="muted">Saldo del mese</span><strong id="monthBalance">€ 0,00</strong></div>
+  </div>
+  <div class="row" style="margin-top:15px"><span class="muted">Budget complessivo</span><strong id="budgetLabel">Non impostato</strong></div>
+  <div class="progress"><div id="budgetProgress"></div></div>
+  <div class="row"><span class="hint" id="budgetUsed">Imposta il tuo budget mensile</span><strong id="budgetLeft"></strong></div>
+ </div>
+ <div class="card"><h2>Registra un movimento</h2><div class="actions">
+  <button class="primary" onclick="showPage('add')">＋ Inserimento manuale</button>
+  <button class="secondary" onclick="startVoice()">🎙️ Registra con voce</button>
+ </div><p class="hint" style="margin-bottom:0">Puoi dire, ad esempio: “Ho speso 35 euro al supermercato con carta” oppure “Ho ricevuto 1.800 euro di stipendio”.</p></div>
+ <div class="card"><div class="row"><h2>Ultimi movimenti</h2><button class="secondary small" onclick="showPage('history')">Vedi tutti</button></div><div id="recentList"></div></div>
+ <div class="card"><h2>Spese per categoria</h2><div id="categorySummary"></div></div>
+</section>
+
+<section id="add" class="hidden">
+ <div class="card"><div class="row"><h2 id="formTitle">Nuovo movimento</h2><button class="secondary small" onclick="showPage('home')">Chiudi</button></div>
+  <div class="formgrid"><div><label>Tipo</label><select id="type"><option value="expense">Uscita</option><option value="income">Entrata</option></select></div><div><label>Importo (€)</label><input id="amount" type="number" min="0.01" step="0.01" placeholder="0,00" inputmode="decimal"></div></div>
+  <label>Descrizione</label><input id="description" placeholder="Es. Supermercato, stipendio...">
+  <div class="formgrid"><div><label>Categoria</label><select id="category"></select></div><div><label>Metodo</label><select id="payment"><option> Carta</option><option>Contanti</option><option>Bonifico</option><option>Satispay</option><option>Addebito</option><option>Altro</option></select></div></div>
+  <label>Data</label><input id="date" type="date">
+  <label>Nota (facoltativa)</label><input id="note" placeholder="Aggiungi un dettaglio">
+  <button class="primary" style="width:100%;margin-top:16px" onclick="saveMovement()">Salva movimento</button>
+  <p class="hint">I dati vengono cifrati prima di essere salvati su questo dispositivo.</p>
+ </div>
+</section>
+
+<section id="history" class="hidden">
+ <div class="card"><h2>Storico movimenti</h2><div class="formgrid"><div><label>Mese</label><input id="filterMonth" type="month" onchange="renderHistory()"></div><div><label>Tipo</label><select id="filterType" onchange="renderHistory()"><option value="all">Tutti</option><option value="expense">Uscite</option><option value="income">Entrate</option></select></div></div><div id="historyList" style="margin-top:12px"></div></div>
+</section>
+
+<section id="budgets" class="hidden">
+ <div class="card"><h2>Budget mensile</h2><label>Budget complessivo (€)</label><input id="overallBudget" type="number" min="0" step="10" placeholder="Es. 2500"><button class="primary" style="width:100%;margin-top:10px" onclick="saveOverallBudget()">Salva budget generale</button></div>
+ <div class="card"><h2>Budget per categoria</h2><p class="hint">Imposta un limite per le categorie più importanti. Lascia vuoto se non vuoi un limite.</p><div id="categoryBudgets"></div><button class="primary" style="width:100%;margin-top:12px" onclick="saveCategoryBudgets()">Salva budget categorie</button></div>
+</section>
+
+<section id="settings" class="hidden">
+ <div class="card"><h2>Impostazioni e dati</h2><p class="hint">I movimenti sono cifrati sul dispositivo. Conserva la password e crea periodicamente un backup cifrato.</p>
+ <button class="secondary" style="width:100%;margin:7px 0" onclick="exportJSON()">⬇ Esporta backup cifrato</button>
+ <button class="secondary" style="width:100%;margin:7px 0" onclick="exportCSV()">⬇ Esporta CSV (non cifrato)</button>
+ <label>Ripristina un backup JSON</label><input type="file" id="restoreFile" accept="application/json" onchange="importJSON(event)">
+ <p class="hint">La cifratura protegge i dati salvati sul dispositivo. Il codice dell’app è ospitato online, ma i movimenti non vengono trasmessi al servizio di hosting. Il CSV esportato è leggibile: proteggilo come un documento finanziario.</p>
+ <div class="row" style="margin-top:16px"><span class="hint">Archivio cifrato</span><button class="secondary small" onclick="lockApp()">Blocca app</button><button class="danger small" onclick="resetData()">Azzera dati</button></div>
+ </div>
+</section>
+</main>
+<nav class="tabs">
+ <button class="active" data-page="home" onclick="showPage('home')"><span>⌂</span>Home</button>
+ <button data-page="history" onclick="showPage('history')"><span>☷</span>Storico</button>
+ <button data-page="budgets" onclick="showPage('budgets')"><span>◎</span>Budget</button>
+ <button data-page="settings" onclick="showPage('settings')"><span>⚙</span>Impostazioni</button>
+</nav>
+</div>
+<div id="toast"></div>
+<script>
+const KEY='spese-smart-v2-encrypted';
+const CATS={expense:['Casa','Utenze','Alimentari','Ristorazione','Trasporti','Auto','Figlie e famiglia','Salute','Tempo libero','Viaggi','Shopping','Altro'],income:['Stipendio','Compensi','Rimborsi','Entrate extra','Altro']};
+const ICONS={'Casa':'🏠','Utenze':'💡','Alimentari':'🛒','Ristorazione':'🍽️','Trasporti':'🚌','Auto':'🚗','Figlie e famiglia':'👨‍👧‍👧','Salute':'💊','Tempo libero':'🎸','Viaggi':'✈️','Shopping':'🛍️','Altro':'📌','Stipendio':'💶','Compensi':'💼','Rimborsi':'↩️','Entrate extra':'➕'};
+let state={items:[],overall:0,catBudgets:{}},editing=null;
+const euro=n=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(Number(n)||0);
+const today=()=>new Date().toISOString().slice(0,10);
+const monthNow=()=>today().slice(0,7);
+let encryptionKey=null, gateMode='setup';
+const enc=new TextEncoder(), dec=new TextDecoder();
+function b64(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes)))}
+function unb64(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
+async function deriveKey(password,salt){const material=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function encryptState(obj,key){const iv=crypto.getRandomValues(new Uint8Array(12));const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,enc.encode(JSON.stringify(obj)));return {format:'SpeseSmartEncrypted',version:1,iv:b64(iv),data:b64(cipher)}}
+async function decryptEnvelope(envelope,key){if(envelope.format!=='SpeseSmartEncrypted'||envelope.version!==1)throw Error('Backup non riconosciuto');const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(envelope.iv)},key,unb64(envelope.data));return JSON.parse(dec.decode(plain))}
+function setGate(mode){gateMode=mode;document.getElementById('confirmWrap').classList.toggle('hidden',mode!=='setup');document.getElementById('gateIntro').textContent=mode==='setup'?'Crea una password personale. I tuoi dati saranno cifrati direttamente su questo iPhone.':'Inserisci la tua password per decifrare e aprire il tuo archivio.';document.getElementById('gateButton').textContent=mode==='setup'?'Crea archivio protetto':'Sblocca Spese Smart';document.getElementById('gatePassword').value='';document.getElementById('gateConfirm').value='';document.getElementById('gateError').textContent=''}
+async function handleGate(){const p=document.getElementById('gatePassword').value;const err=document.getElementById('gateError');if(p.length<10){err.textContent='Scegli una password di almeno 10 caratteri.';return}try{document.getElementById('gateButton').disabled=true;if(gateMode==='setup'){if(p!==document.getElementById('gateConfirm').value)throw Error('Le due password non coincidono.');const salt=crypto.getRandomValues(new Uint8Array(16));encryptionKey=await deriveKey(p,salt);const envelope=await encryptState(state,encryptionKey);envelope.salt=b64(salt);localStorage.setItem(KEY,JSON.stringify(envelope));}else{const envelope=JSON.parse(localStorage.getItem(KEY));encryptionKey=await deriveKey(p,unb64(envelope.salt));state=await decryptEnvelope(envelope,encryptionKey)}
+ document.getElementById('securityGate').style.display='none';document.getElementById('appShell').classList.remove('hidden');render();populateCategory();document.getElementById('date').value=today();document.getElementById('filterMonth').value=monthNow();document.getElementById('overallBudget').value=state.overall||'';
+ }catch(e){encryptionKey=null;err.textContent=gateMode==='setup'?e.message:'Password errata oppure archivio danneggiato.'}finally{document.getElementById('gateButton').disabled=false}}
+async function persist(){if(!encryptionKey)throw Error('Archivio bloccato');const old=JSON.parse(localStorage.getItem(KEY)||'{}');const envelope=await encryptState(state,encryptionKey);envelope.salt=old.salt;localStorage.setItem(KEY,JSON.stringify(envelope));render()}
+function lockApp(){encryptionKey=null;state={items:[],overall:0,catBudgets:{}};document.getElementById('appShell').classList.add('hidden');document.getElementById('securityGate').style.display='flex';setGate('unlock')}
+async function resetData(){if(confirm('Eliminare definitivamente tutti i movimenti e i budget?')){state={items:[],overall:0,catBudgets:{}};await persist();toast('Dati eliminati')}}
+function load(){const stored=localStorage.getItem(KEY);setGate(stored?'unlock':'setup');document.getElementById('securityGate').style.display='flex'}
+function monthItems(){return state.items.filter(x=>x.date&&x.date.slice(0,7)===monthNow())}
+function sum(arr,type){return arr.filter(x=>x.type===type).reduce((a,x)=>a+Number(x.amount),0)}
+function render(){
+ const m=monthItems(),spent=sum(m,'expense'),income=sum(m,'income'),balance=income-spent;
+ document.getElementById('monthLabel').textContent=new Date().toLocaleDateString('it-IT',{month:'long',year:'numeric'}).toUpperCase();
+ document.getElementById('monthSpent').textContent=euro(spent);document.getElementById('monthIncome').textContent=euro(income);document.getElementById('monthBalance').textContent=euro(balance);
+ document.getElementById('monthBalance').className=balance>=0?'positive':'negative';
+ document.getElementById('budgetLabel').textContent=state.overall?euro(state.overall):'Non impostato';
+ const pct=state.overall?Math.min(100,spent/state.overall*100):0;document.getElementById('budgetProgress').style.width=pct+'%';document.getElementById('budgetProgress').style.background=pct>=100?'#c44747':'#16845b';
+ document.getElementById('budgetUsed').textContent=state.overall?`${pct.toFixed(0)}% del budget utilizzato`:'Imposta il tuo budget mensile';document.getElementById('budgetLeft').textContent=state.overall?`Residuo ${euro(state.overall-spent)}`:'';
+ const recent=[...state.items].sort((a,b)=>b.date.localeCompare(a.date)||b.created-a.created).slice(0,5);document.getElementById('recentList').innerHTML=recent.length?recent.map(itemHTML).join(''):'<p class="hint">Non hai ancora registrato movimenti.</p>';
+ const cats=CATS.expense.map(c=>({c,v:sum(m.filter(x=>x.category===c),'expense')})).filter(x=>x.v>0).sort((a,b)=>b.v-a.v);
+ document.getElementById('categorySummary').innerHTML=cats.length?cats.map(x=>`<div class="catrow"><div class="cathead"><span>${ICONS[x.c]||'•'} ${x.c}</span><strong>${euro(x.v)}</strong></div><div class="bar"><div style="width:${spent?x.v/spent*100:0}%"></div></div></div>`).join(''):'<p class="hint">Le categorie compariranno quando registrerai le spese.</p>';
+ renderHistory();renderCategoryBudgets();
+}
+function itemHTML(x){return `<div class="entry"><div class="ico">${ICONS[x.category]||'•'}</div><div style="flex:1;min-width:0"><div class="entry-title">${esc(x.description||x.category)}</div><div class="entry-sub">${esc(x.category)} · ${new Date(x.date+'T12:00:00').toLocaleDateString('it-IT')} · ${esc(x.payment||'')}</div></div><div class="amount ${x.type==='income'?'positive':'negative'}">${x.type==='income'?'+':'−'} ${euro(x.amount)}<div style="display:flex;gap:5px;margin-top:5px;justify-content:flex-end"><button class="secondary small" onclick="editItem('${x.id}')">Modifica</button><button class="danger small" onclick="deleteItem('${x.id}')">×</button></div></div></div>`}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function showPage(p){['dashboard','add','history','budgets','settings'].forEach(id=>document.getElementById(id).classList.add('hidden'));document.getElementById(p==='home'?'dashboard':p).classList.remove('hidden');document.querySelectorAll('.tabs button').forEach(b=>b.classList.toggle('active',b.dataset.page===p));if(p==='budgets')renderCategoryBudgets();if(p==='history')renderHistory();window.scrollTo(0,0)}
+function populateCategory(){const t=document.getElementById('type').value;document.getElementById('category').innerHTML=CATS[t].map(c=>`<option>${c}</option>`).join('')}
+document.getElementById('type').addEventListener('change',populateCategory);
+async function saveMovement(){const amount=Number(document.getElementById('amount').value);if(!amount||amount<=0){toast('Inserisci un importo valido');return}const item={id:editing||crypto.randomUUID(),type:document.getElementById('type').value,amount,description:document.getElementById('description').value.trim(),category:document.getElementById('category').value,payment:document.getElementById('payment').value.trim(),date:document.getElementById('date').value||today(),note:document.getElementById('note').value,created:Date.now()};if(editing){state.items=state.items.map(x=>x.id===editing?item:x)}else state.items.push(item);editing=null;await persist();clearForm();showPage('home');toast('Movimento salvato')}
+function clearForm(){['amount','description','note'].forEach(id=>document.getElementById(id).value='');document.getElementById('type').value='expense';populateCategory();document.getElementById('date').value=today();document.getElementById('formTitle').textContent='Nuovo movimento'}
+function editItem(id){const x=state.items.find(a=>a.id===id);if(!x)return;editing=id;showPage('add');document.getElementById('formTitle').textContent='Modifica movimento';document.getElementById('type').value=x.type;populateCategory();document.getElementById('amount').value=x.amount;document.getElementById('description').value=x.description;document.getElementById('category').value=x.category;document.getElementById('payment').value=x.payment;document.getElementById('date').value=x.date;document.getElementById('note').value=x.note||''}
+async function deleteItem(id){if(confirm('Eliminare questo movimento?')){state.items=state.items.filter(x=>x.id!==id);await persist();toast('Movimento eliminato')}}
+function renderHistory(){const el=document.getElementById('historyList');if(!el)return;const mon=document.getElementById('filterMonth').value||monthNow(),typ=document.getElementById('filterType').value;const arr=[...state.items].filter(x=>x.date.slice(0,7)===mon&&(typ==='all'||x.type===typ)).sort((a,b)=>b.date.localeCompare(a.date)||b.created-a.created);el.innerHTML=arr.length?arr.map(itemHTML).join(''):'<p class="hint">Nessun movimento per questo periodo.</p>'}
+async function saveOverallBudget(){state.overall=Number(document.getElementById('overallBudget').value)||0;await persist();toast('Budget generale salvato')}
+function renderCategoryBudgets(){const el=document.getElementById('categoryBudgets');if(!el)return;el.innerHTML=CATS.expense.map(c=>`<div style="margin:10px 0"><label>${ICONS[c]||''} ${c}</label><input type="number" min="0" step="10" data-cat="${c}" value="${state.catBudgets[c]||''}" placeholder="Nessun limite"></div>`).join('')}
+async function saveCategoryBudgets(){const obj={};document.querySelectorAll('[data-cat]').forEach(i=>{if(Number(i.value)>0)obj[i.dataset.cat]=Number(i.value)});state.catBudgets=obj;await persist();toast('Budget per categoria salvati')}
+function toast(s){const t=document.getElementById('toast');t.textContent=s;t.style.display='block';setTimeout(()=>t.style.display='none',2300)}
+function parseVoice(s){
+ const lower=s.toLowerCase();let type=/entrata|ricevuto|ricevuta|incassato|incassata|stipendio|rimborso/.test(lower)?'income':'expense';
+ let match=lower.match(/(\d+(?:[.,]\d{1,2})?)\s*(?:euro|€)?/);if(!match){toast('Non ho riconosciuto l’importo: inseriscilo manualmente');return}
+ let amount=Number(match[1].replace(',','.'));let category='Altro';
+ const rules=[['Alimentari',/supermercat|spesa|alimentar|market/],['Ristorazione',/ristorant|pizzer|bar|pranzo|cena|delivery/],['Trasporti',/taxi|autobus|metro|treno|parchegg|trasport/],['Auto',/benzina|carburante|gomm|officina|autolavagg/],['Casa',/affitto|mutuo|condominio|casa/],['Utenze',/bolletta|luce|gas|acqua|telefono|internet/],['Figlie e famiglia',/figli|figlia|scuola|asilo/],['Salute',/farmacia|medic|visita|dentist/],['Tempo libero',/cinema|sport|musica|palestra/],['Viaggi',/hotel|volo|viaggio|vacanz/],['Shopping',/vestit|scarpe|shopping|negozio/],['Stipendio',/stipendio/],['Compensi',/compenso|fattura|incasso/],['Rimborsi',/rimborso/],['Entrate extra',/entrata|ricevuto|ricevuta/]];
+ for(const [c,r] of rules){if(r.test(lower)){category=c;break}}
+ const payment=/contanti|cash/.test(lower)?'Contanti':/satispay/.test(lower)?'Satispay':/bonifico/.test(lower)?'Bonifico':/carta|bancomat/.test(lower)?'Carta':'Carta';
+ const desc=s.replace(match[0],'').replace(/\b(ho|speso|spesa|pagato|pagata|ricevuto|ricevuta|euro|con|la|il|di|da)\b/gi,' ').trim().replace(/\s+/g,' ')||category;
+ document.getElementById('type').value=type;populateCategory();document.getElementById('amount').value=amount;document.getElementById('description').value=desc;document.getElementById('category').value=category;document.getElementById('payment').value=payment;document.getElementById('date').value=today();showPage('add');toast('Ho preparato il movimento: controlla e salva')}
+function startVoice(){
+ const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+ if(SR){const rec=new SR();rec.lang='it-IT';rec.interimResults=false;rec.maxAlternatives=1;rec.onresult=e=>parseVoice(e.results[0][0].transcript);rec.onerror=()=>{showVoiceFallback()};rec.start();toast('Ti ascolto…')}
+ else showVoiceFallback();
+}
+function showVoiceFallback(){showPage('add');const d=document.getElementById('description');d.placeholder='Usa il microfono della tastiera iPhone per dettare: “Ho speso 35 euro al supermercato con carta”';d.focus();toast('Detta nel campo descrizione usando il microfono della tastiera')}
+function download(name,content,type){const a=document.createElement('a'),url=URL.createObjectURL(new Blob([content],{type}));a.href=url;a.download=name;a.click();URL.revokeObjectURL(url)}
+function exportJSON(){const data=localStorage.getItem(KEY);if(!data){toast('Nessun archivio da esportare');return}download('spese-smart-backup-cifrato-'+today()+'.json',data,'application/json')}
+function exportCSV(){if(!confirm('Il CSV contiene dati leggibili e NON è cifrato. Salvalo solo in un luogo protetto. Vuoi continuare?'))return;const rows=[['Data','Tipo','Importo','Descrizione','Categoria','Metodo','Nota'],...state.items.map(x=>[x.date,x.type,x.amount,x.description,x.category,x.payment,x.note||''])];const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n');download('spese-smart-'+today()+'.csv','\ufeff'+csv,'text/csv;charset=utf-8')}
+async function importJSON(e){const f=e.target.files[0];if(!f)return;try{const envelope=JSON.parse(await f.text());const imported=await decryptEnvelope(envelope,encryptionKey);if(!Array.isArray(imported.items))throw Error();if(confirm('Il ripristino sostituirà i dati attuali. Continuare?')){state={items:imported.items,overall:imported.overall||0,catBudgets:imported.catBudgets||{}};await persist();toast('Backup cifrato ripristinato')}}catch(err){toast('Backup non valido o password diversa')}e.target.value=''}
+if('serviceWorker' in navigator && location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+load();
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'&&encryptionKey)lockApp()});
+</script>
+</body></html>
