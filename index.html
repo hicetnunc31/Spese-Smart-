@@ -46,6 +46,7 @@ label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}input,se
  <label for="gatePassword">Password personale</label><input id="gatePassword" type="password" autocomplete="current-password" minlength="10" placeholder="Almeno 10 caratteri">
  <div id="confirmWrap"><label for="gateConfirm">Conferma password</label><input id="gateConfirm" type="password" autocomplete="new-password" minlength="10" placeholder="Ripeti la password"></div>
  <button class="primary" id="gateButton" onclick="handleGate()">Crea archivio protetto</button>
+ <button class="secondary hidden" id="touchUnlockButton" onclick="unlockWithTouchID()">👆 Sblocca con Touch ID</button>
  <div id="gateError"></div><p class="hint">La password non viene inviata né salvata. Se la dimentichi, non sarà possibile recuperare i dati: conserva una copia sicura.</p>
  </div></section>
 <div id="appShell" class="hidden">
@@ -93,6 +94,8 @@ label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}input,se
 
 <section id="settings" class="hidden">
  <div class="card"><h2>Impostazioni e dati</h2><p class="hint">I movimenti sono cifrati sul dispositivo. Conserva la password e crea periodicamente un backup cifrato.</p>
+ <button class="secondary" id="enableTouchIDButton" style="width:100%;margin:7px 0" onclick="enableTouchID()">👆 Attiva Touch ID su questo iPhone</button>
+ <p class="hint" id="touchIDStatus">Touch ID è facoltativo. La password rimane sempre disponibile.</p>
  <button class="secondary" style="width:100%;margin:7px 0" onclick="exportJSON()">⬇ Esporta backup cifrato</button>
  <button class="secondary" style="width:100%;margin:7px 0" onclick="exportCSV()">⬇ Esporta CSV (non cifrato)</button>
  <label>Ripristina un backup JSON</label><input type="file" id="restoreFile" accept="application/json" onchange="importJSON(event)">
@@ -121,17 +124,90 @@ let encryptionKey=null, gateMode='setup';
 const enc=new TextEncoder(), dec=new TextDecoder();
 function b64(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes)))}
 function unb64(s){return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
-async function deriveKey(password,salt){const material=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt'])}
+async function deriveKey(password,salt){const material=await crypto.subtle.importKey('raw',enc.encode(password),'PBKDF2',false,['deriveKey']);return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:310000,hash:'SHA-256'},material,{name:'AES-GCM',length:256},true,['encrypt','decrypt'])}
+
+const TOUCH_KEY='spese-smart-touchid-v1';
+function b64u(bytes){return btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
+function unb64u(s){s=s.replace(/-/g,'+').replace(/_/g,'/');while(s.length%4)s+='=';return Uint8Array.from(atob(s),c=>c.charCodeAt(0))}
+function randomBytes(n){return crypto.getRandomValues(new Uint8Array(n))}
+function touchConfig(){try{return JSON.parse(localStorage.getItem(TOUCH_KEY)||'null')}catch(e){return null}}
+function setTouchControls(){
+ const cfg=touchConfig(), gateBtn=document.getElementById('touchUnlockButton');
+ if(gateBtn)gateBtn.classList.toggle('hidden',!cfg);
+ const status=document.getElementById('touchIDStatus'), enable=document.getElementById('enableTouchIDButton');
+ if(status)status.textContent=cfg?'Touch ID configurato su questo dispositivo. La password rimane sempre disponibile.':'Touch ID non configurato. La password rimane sempre disponibile.';
+ if(enable)enable.textContent=cfg?'Riconfigura Touch ID':'Attiva Touch ID su questo iPhone';
+}
+async function prfWrappingKey(prfBytes,salt){
+ const material=await crypto.subtle.importKey('raw',prfBytes,'HKDF',false,['deriveKey']);
+ return crypto.subtle.deriveKey({name:'HKDF',hash:'SHA-256',salt,info:enc.encode('SpeseSmart TouchID key wrapping v1')},material,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);
+}
+async function enableTouchID(){
+ const status=document.getElementById('touchIDStatus'),btn=document.getElementById('enableTouchIDButton');
+ try{
+  if(!window.isSecureContext||!navigator.credentials||!window.PublicKeyCredential)throw Error('WebAuthn non disponibile in questo contesto Safari HTTPS.');
+  if(!encryptionKey)throw Error('Sblocca prima l’archivio con la password.');
+  btn.disabled=true;
+  const salt=randomBytes(32),challenge=randomBytes(32),userId=randomBytes(16);
+  const credential=await navigator.credentials.create({publicKey:{
+   challenge,rp:{name:'Spese Smart',id:location.hostname},
+   user:{id:userId,name:'utente-spese-smart',displayName:'Spese Smart'},
+   pubKeyCredParams:[{type:'public-key',alg:-7}],timeout:60000,
+   authenticatorSelection:{authenticatorAttachment:'platform',userVerification:'required',residentKey:'preferred'},
+   attestation:'none',extensions:{prf:{eval:{first:salt}}}
+  }});
+  if(!credential)throw Error('Registrazione annullata. Nessun dato è stato modificato.');
+  const createExt=credential.getClientExtensionResults();
+  if(!createExt.prf||createExt.prf.enabled!==true)throw Error('Safari/iOS non conferma il supporto PRF necessario. Continua a usare la password: archivio invariato.');
+  const raw=await crypto.subtle.exportKey('raw',encryptionKey);
+  const assertion=await navigator.credentials.get({publicKey:{
+   challenge:randomBytes(32),rpId:location.hostname,
+   allowCredentials:[{type:'public-key',id:credential.rawId}],userVerification:'required',timeout:60000,
+   extensions:{prf:{eval:{first:salt}}}
+  }});
+  const prf=assertion.getClientExtensionResults().prf?.results?.first;
+  if(!prf)throw Error('Safari non ha restituito il risultato PRF. Password e archivio restano invariati.');
+  const wrapKey=await prfWrappingKey(prf,salt),iv=randomBytes(12);
+  const wrapped=await crypto.subtle.encrypt({name:'AES-GCM',iv},wrapKey,raw);
+  const cfg={version:1,credentialId:b64u(credential.rawId),salt:b64u(salt),iv:b64u(iv),wrappedKey:b64u(wrapped)};
+  localStorage.setItem(TOUCH_KEY,JSON.stringify(cfg));setTouchControls();
+  if(status)status.textContent='Touch ID configurato. Blocca l’app e prova lo sblocco biometrico.';
+  toast('Touch ID configurato');
+ }catch(e){if(status)status.textContent=e&&e.message?e.message:'Configurazione Touch ID non riuscita. La password resta disponibile.';}
+ finally{if(btn)btn.disabled=false;}
+}
+async function unlockWithTouchID(){
+ const btn=document.getElementById('touchUnlockButton'),err=document.getElementById('gateError');
+ try{
+  const cfg=touchConfig();if(!cfg)throw Error('Touch ID non configurato. Usa la password.');
+  btn.disabled=true;
+  const assertion=await navigator.credentials.get({publicKey:{
+   challenge:randomBytes(32),rpId:location.hostname,
+   allowCredentials:[{type:'public-key',id:unb64u(cfg.credentialId)}],userVerification:'required',timeout:60000,
+   extensions:{prf:{eval:{first:unb64u(cfg.salt)}}}
+  }});
+  const prf=assertion.getClientExtensionResults().prf?.results?.first;
+  if(!prf)throw Error('Touch ID/PRF non disponibile. Sblocca con la password.');
+  const wrapKey=await prfWrappingKey(prf,unb64u(cfg.salt));
+  const raw=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64u(cfg.iv)},wrapKey,unb64u(cfg.wrappedKey));
+  encryptionKey=await crypto.subtle.importKey('raw',raw,{name:'AES-GCM'},false,['encrypt','decrypt']);
+  const envelope=JSON.parse(localStorage.getItem(KEY));state=await decryptEnvelope(envelope,encryptionKey);
+  document.getElementById('securityGate').style.display='none';document.getElementById('appShell').classList.remove('hidden');
+  render();populateCategory();document.getElementById('date').value=today();document.getElementById('filterMonth').value=monthNow();document.getElementById('overallBudget').value=state.overall||'';setTouchControls();
+ }catch(e){encryptionKey=null;if(err)err.textContent=e&&e.message?e.message:'Sblocco Touch ID non riuscito. Usa la password.';}
+ finally{if(btn)btn.disabled=false;}
+}
+
 async function encryptState(obj,key){const iv=crypto.getRandomValues(new Uint8Array(12));const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,enc.encode(JSON.stringify(obj)));return {format:'SpeseSmartEncrypted',version:1,iv:b64(iv),data:b64(cipher)}}
 async function decryptEnvelope(envelope,key){if(envelope.format!=='SpeseSmartEncrypted'||envelope.version!==1)throw Error('Backup non riconosciuto');const plain=await crypto.subtle.decrypt({name:'AES-GCM',iv:unb64(envelope.iv)},key,unb64(envelope.data));return JSON.parse(dec.decode(plain))}
-function setGate(mode){gateMode=mode;document.getElementById('confirmWrap').classList.toggle('hidden',mode!=='setup');document.getElementById('gateIntro').textContent=mode==='setup'?'Crea una password personale. I tuoi dati saranno cifrati direttamente su questo iPhone.':'Inserisci la tua password per decifrare e aprire il tuo archivio.';document.getElementById('gateButton').textContent=mode==='setup'?'Crea archivio protetto':'Sblocca Spese Smart';document.getElementById('gatePassword').value='';document.getElementById('gateConfirm').value='';document.getElementById('gateError').textContent=''}
+function setGate(mode){gateMode=mode;document.getElementById('confirmWrap').classList.toggle('hidden',mode!=='setup');document.getElementById('gateIntro').textContent=mode==='setup'?'Crea una password personale. I tuoi dati saranno cifrati direttamente su questo iPhone.':'Inserisci la tua password per decifrare e aprire il tuo archivio.';document.getElementById('gateButton').textContent=mode==='setup'?'Crea archivio protetto':'Sblocca Spese Smart';document.getElementById('gatePassword').value='';document.getElementById('gateConfirm').value='';document.getElementById('gateError').textContent='';setTouchControls()}
 async function handleGate(){const p=document.getElementById('gatePassword').value;const err=document.getElementById('gateError');if(p.length<10){err.textContent='Scegli una password di almeno 10 caratteri.';return}try{document.getElementById('gateButton').disabled=true;if(gateMode==='setup'){if(p!==document.getElementById('gateConfirm').value)throw Error('Le due password non coincidono.');const salt=crypto.getRandomValues(new Uint8Array(16));encryptionKey=await deriveKey(p,salt);const envelope=await encryptState(state,encryptionKey);envelope.salt=b64(salt);localStorage.setItem(KEY,JSON.stringify(envelope));}else{const envelope=JSON.parse(localStorage.getItem(KEY));encryptionKey=await deriveKey(p,unb64(envelope.salt));state=await decryptEnvelope(envelope,encryptionKey)}
  document.getElementById('securityGate').style.display='none';document.getElementById('appShell').classList.remove('hidden');render();populateCategory();document.getElementById('date').value=today();document.getElementById('filterMonth').value=monthNow();document.getElementById('overallBudget').value=state.overall||'';
  }catch(e){encryptionKey=null;err.textContent=gateMode==='setup'?e.message:'Password errata oppure archivio danneggiato.'}finally{document.getElementById('gateButton').disabled=false}}
 async function persist(){if(!encryptionKey)throw Error('Archivio bloccato');const old=JSON.parse(localStorage.getItem(KEY)||'{}');const envelope=await encryptState(state,encryptionKey);envelope.salt=old.salt;localStorage.setItem(KEY,JSON.stringify(envelope));render()}
 function lockApp(){encryptionKey=null;state={items:[],overall:0,catBudgets:{}};document.getElementById('appShell').classList.add('hidden');document.getElementById('securityGate').style.display='flex';setGate('unlock')}
 async function resetData(){if(confirm('Eliminare definitivamente tutti i movimenti e i budget?')){state={items:[],overall:0,catBudgets:{}};await persist();toast('Dati eliminati')}}
-function load(){const stored=localStorage.getItem(KEY);setGate(stored?'unlock':'setup');document.getElementById('securityGate').style.display='flex'}
+function load(){const stored=localStorage.getItem(KEY);setGate(stored?'unlock':'setup');document.getElementById('securityGate').style.display='flex';setTouchControls()}
 function monthItems(){return state.items.filter(x=>x.date&&x.date.slice(0,7)===monthNow())}
 function sum(arr,type){return arr.filter(x=>x.type===type).reduce((a,x)=>a+Number(x.amount),0)}
 function render(){
