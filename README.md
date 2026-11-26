@@ -38,3 +38,10 @@ Questa cartella deve essere pubblicata su un hosting HTTPS (ad esempio un propri
 - Il backup JSON è cifrato. L'esportazione CSV è in chiaro e mostra un avviso prima del download.
 - I dati restano sul dispositivo/browser; non esiste sincronizzazione cloud. Il blocco automatico al passaggio in background è una protezione aggiuntiva, non una garanzia assoluta su ogni versione iOS.
 - Usare solo tramite HTTPS e proteggere anche l'iPhone con codice/Face ID.
+
+
+## Accesso biometrico opzionale (Touch ID)
+- La versione aggiornata aggiunge WebAuthn con autenticatore di piattaforma e estensione PRF, se supportata da iOS/Safari.
+- Dopo aver sbloccato con la password, si può scegliere “Attiva Touch ID”. La chiave AES dell’archivio esistente viene avvolta in memoria con una chiave derivata dal risultato PRF; l’archivio cifrato e la sua chiave/sale originari non vengono sostituiti.
+- Se il browser non conferma il supporto PRF, l’attivazione viene rifiutata e si continua con la password.
+- La password resta sempre disponibile. Non cancellare dati del sito né cambiare dominio senza prima esportare e verificare un backup cifrato. La biometria è verificata da iOS: l’app non legge né memorizza l’impronta.
