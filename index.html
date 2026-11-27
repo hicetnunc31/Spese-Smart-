@@ -96,6 +96,14 @@ label{display:block;font-size:13px;color:var(--muted);margin:10px 0 5px}input,se
  <div class="card"><h2>Impostazioni e dati</h2><p class="hint">I movimenti sono cifrati sul dispositivo. Conserva la password e crea periodicamente un backup cifrato.</p>
  <button class="secondary" id="enableTouchIDButton" style="width:100%;margin:7px 0" onclick="enableTouchID()">👆 Attiva Touch ID su questo iPhone</button>
  <p class="hint" id="touchIDStatus">Touch ID è facoltativo. La password rimane sempre disponibile.</p>
+ <div style="border-top:1px solid var(--line);margin-top:16px;padding-top:14px">
+  <h2>Cambia password</h2>
+  <p class="hint">Imposta una nuova password. L'archivio verrà ricifrato e Touch ID sarà aggiornato per continuare a funzionare.</p>
+  <label for="newPassword">Nuova password</label><input id="newPassword" type="password" autocomplete="new-password" minlength="10" placeholder="Almeno 10 caratteri">
+  <label for="confirmNewPassword">Conferma nuova password</label><input id="confirmNewPassword" type="password" autocomplete="new-password" minlength="10" placeholder="Ripeti la nuova password">
+  <button class="primary" style="width:100%;margin-top:10px" onclick="changePassword()">Aggiorna password</button>
+  <p class="hint" id="passwordChangeStatus" aria-live="polite"></p>
+ </div>
  <button class="secondary" style="width:100%;margin:7px 0" onclick="exportJSON()">⬇ Esporta backup cifrato</button>
  <button class="secondary" style="width:100%;margin:7px 0" onclick="exportCSV()">⬇ Esporta CSV (non cifrato)</button>
  <label>Ripristina un backup JSON</label><input type="file" id="restoreFile" accept="application/json" onchange="importJSON(event)">
@@ -196,6 +204,54 @@ async function unlockWithTouchID(){
   render();populateCategory();document.getElementById('date').value=today();document.getElementById('filterMonth').value=monthNow();document.getElementById('overallBudget').value=state.overall||'';setTouchControls();
  }catch(e){encryptionKey=null;if(err)err.textContent=e&&e.message?e.message:'Sblocco Touch ID non riuscito. Usa la password.';}
  finally{if(btn)btn.disabled=false;}
+}
+
+async function changePassword(){
+ const first=document.getElementById('newPassword').value;
+ const second=document.getElementById('confirmNewPassword').value;
+ const status=document.getElementById('passwordChangeStatus');
+ const button=document.querySelector('#settings button[onclick="changePassword()"]');
+ try{
+  if(!encryptionKey)throw Error('Prima sblocca l’archivio.');
+  if(first.length<10)throw Error('La password deve contenere almeno 10 caratteri.');
+  if(first!==second)throw Error('Le due password non coincidono.');
+  const cfg=touchConfig();
+  if(!cfg)throw Error('Per aggiornare insieme password e Touch ID, attiva prima Touch ID su questo iPhone.');
+  if(button)button.disabled=true;
+  status.textContent='Conferma l’operazione con Touch ID…';
+  const assertion=await navigator.credentials.get({publicKey:{
+   challenge:randomBytes(32),rpId:location.hostname,
+   allowCredentials:[{type:'public-key',id:unb64u(cfg.credentialId)}],
+   userVerification:'required',timeout:60000,
+   extensions:{prf:{eval:{first:unb64u(cfg.salt)}}}
+  }});
+  const prf=assertion.getClientExtensionResults().prf?.results?.first;
+  if(!prf)throw Error('Safari non ha restituito la chiave Touch ID. Password e archivio non sono stati modificati.');
+  const newSalt=randomBytes(16);
+  const newKey=await deriveKey(first,newSalt);
+  const newEnvelope=await encryptState(state,newKey);
+  newEnvelope.salt=b64(newSalt);
+  const wrapKey=await prfWrappingKey(prf,unb64u(cfg.salt));
+  const wrapIv=randomBytes(12);
+  const raw=await crypto.subtle.exportKey('raw',newKey);
+  const wrapped=await crypto.subtle.encrypt({name:'AES-GCM',iv:wrapIv},wrapKey,raw);
+  const newCfg={...cfg,iv:b64u(wrapIv),wrappedKey:b64u(wrapped)};
+  const oldEnvelope=localStorage.getItem(KEY),oldCfg=localStorage.getItem(TOUCH_KEY);
+  try{
+   localStorage.setItem(KEY,JSON.stringify(newEnvelope));
+   localStorage.setItem(TOUCH_KEY,JSON.stringify(newCfg));
+  }catch(storageError){
+   if(oldEnvelope!==null)localStorage.setItem(KEY,oldEnvelope);else localStorage.removeItem(KEY);
+   if(oldCfg!==null)localStorage.setItem(TOUCH_KEY,oldCfg);else localStorage.removeItem(TOUCH_KEY);
+   throw storageError;
+  }
+  encryptionKey=newKey;
+  document.getElementById('newPassword').value='';
+  document.getElementById('confirmNewPassword').value='';
+  status.textContent='Password aggiornata. Usa la nuova password al prossimo accesso; Touch ID è stato mantenuto.';
+  toast('Password aggiornata');
+ }catch(e){status.textContent=e&&e.message?e.message:'Impossibile aggiornare la password. Nessuna modifica completata.';}
+ finally{if(button)button.disabled=false;}
 }
 
 async function encryptState(obj,key){const iv=crypto.getRandomValues(new Uint8Array(12));const cipher=await crypto.subtle.encrypt({name:'AES-GCM',iv},key,enc.encode(JSON.stringify(obj)));return {format:'SpeseSmartEncrypted',version:1,iv:b64(iv),data:b64(cipher)}}
